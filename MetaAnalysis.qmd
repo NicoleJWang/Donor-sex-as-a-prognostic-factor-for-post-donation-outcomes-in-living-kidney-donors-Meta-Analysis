@@ -1,0 +1,3284 @@
+---
+title: "Sex and gender as prognostic factors for outcomes among living kidney donors: A Systematic Review"
+format:
+    html:
+      toc-title: Table of contents
+      toc: true
+      toc-depth: 5
+      highlight-style: github
+      toc-location: left
+      page-layout: full
+      embed-resources: true
+      self-contained-math: true
+editor: visual
+date: "14 Sept 2026"
+execute:
+  echo: false
+toc: true
+toc-depth: 5
+---
+
+::: {.content-hidden when-format="html"}
+## Data and package
+
+```{r, message=FALSE, warning=FALSE, echo=TRUE, include=FALSE}
+# Check libraries, install missing packages, update old packages, and load packages
+libs <- c("dplyr", "tidyr", "readxl","ggplot2", "ggplotify", "meta", "metafor", "ggpubr", "writexl")
+
+# # Install packages at once
+# missing <- !libs %in% installed.packages()
+# if (any(missing)) {
+#   install.packages(libs[missing])
+# }
+
+lapply(libs, library, character.only = TRUE)
+
+# Jiayue's working directory
+setwd("/Users/jwan0349/Library/CloudStorage/OneDrive-TheUniversityofSydney(Staff)(2)/CKR/21-Prognosis_Meta-Analysis/Meta-Analysis-Donor-sex-as-a-prognostic-factor-for-post-donation-outcomes")
+
+# Eswari's working directory
+# setwd(C":/Users/dreswarivilayur/OneDrive/phd proposal/prognosis factor review/METANALYSIS DATA_new_latest.xlsx")
+
+```
+:::
+
+------------------------------------------------------------------------
+
+## Outcomes
+
+### 1) Risk of GFR \< 60mls/min, Male vs Female
+
+```{r}
+# Read data into R
+df_gfr <- read_xlsx("METANALYSIS DATA_new_latest.xlsx",
+                  sheet = "gfr_data", skip = 1) %>% 
+  filter(outcome == 2) %>% 
+  mutate( 
+    
+    # Data preparation
+    study_n = trimws(as.character(study_n)),
+    e_men = as.numeric(e_men), 
+    ne_men = as.numeric(ne_men), 
+    e_women = as.numeric(e_women), 
+    ne_women = as.numeric(ne_women),
+    fu_time_cat = as.factor(if_else(f_up %in% c("1yr", "6m"), "1 yr", "Longer than 1 yr")),
+    Era = factor(case_when(
+      study_n %in% c("#7315", "#7472", "#7972") ~ "2021-2026",
+      TRUE ~ "2011-2020")),
+    Era = relevel(Era, ref = "2011-2020"),
+    Region = factor(case_when(study_n %in% c("#3393", "#7472", "#5084") ~ "Europe and Central Asia",
+                              study_n %in% c("#2347") ~ "Latin America and Carribean",
+                              study_n %in% c("#879", "#5950", "#7315") ~ "East Asia and Pacific",
+                              TRUE ~ "South Asia"))
+  ) 
+```
+
+```{r, fig.width=8, fig.height=5}
+m_gfr <- metabin(
+  event.e = e_men,
+  n.e = total_men,
+  event.c = e_women,
+  n.c = total_women,
+  studlab = study_id,
+  data = df_gfr,
+
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_gfr)
+```
+
+#### Forest plot
+
+```{r, fig.height=4, fig.width=12, warning=FALSE}
+fp_gfr <- as.ggplot(~ forest(
+  m_gfr,
+  
+  # Selecte columns to be presented
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  # Label the columns
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  
+  # Selecte columns to be presented
+  rightcols = c("effect", "ci", "w.random"),
+  # Label the columns
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE, digits = 2, digits.sd = 2, digits.mean = 2, digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square = "#82abc4",
+  col.diamond = "#285980",
+  col.study.ci = "black",
+  col.inside = "black"
+))
+
+fp_gfr
+
+# ggsave("Plots/fp_gfr.pdf", fp_gfr, width = 12, height = 4, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+# Save the results to a dataframe to be exported later
+df_fp_gfr <- m_gfr$data %>%
+  mutate(
+    OR = exp(m_gfr$TE),
+    lower_CI = exp(m_gfr$lower),
+    upper_CI = exp(m_gfr$upper),
+    weight_random = weights(m_gfr)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+  )
+```
+
+------------------------------------------------------------------------
+
+#### Stratify by follow-up time
+
+```{r}
+m_gfr_fu <- metabin(
+  event.e = e_men,
+  n.e = total_men,
+  event.c = e_women,
+  n.c = total_women,
+  studlab = study_id,
+  data = df_gfr,
+  subgroup = fu_time_cat,
+
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+m_gfr_fu
+```
+
+-   **Subgroup differences p value = 0.2215, indicates there is NO significant differences of sex among subgroups (follow up time within 1 year v.s. follow up time longer than 1 year).**
+
+-   **Heterogeneity within the subgroup of FU time \> 1 yr.**: $I^2$ = 64.2%
+
+-   **OR is significant in the subgroup of FU time \> 1 yr: 2.9263 \[1.4420, 5.9386\].**
+
+------------------------------------------------------------------------
+
+#### Stratify by era
+
+```{r}
+m_gfr_era <- metabin(
+  event.e = e_men,
+  n.e = total_men,
+  event.c = e_women,
+  n.c = total_women,
+  studlab = study_id,
+  data = df_gfr,
+  subgroup = Era,
+
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+m_gfr_era
+```
+
+##### Forest plot
+
+```{r, fig.height=6, fig.width=12, warning=FALSE}
+fp_gfr_era <- as.ggplot(~ forest(
+  m_gfr_era,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_gfr_era
+
+# ggsave("Plots/fp_gfr_era.pdf", fp_gfr_era, width = 12, height = 6, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_gfr_era <- m_gfr_era$data %>%
+  mutate(
+    OR = exp(m_gfr$TE),
+    lower_CI = exp(m_gfr$lower),
+    upper_CI = exp(m_gfr$upper),
+    weight_random = weights(m_gfr)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    Era = Era,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+  )
+```
+
+#### By region
+
+```{r}
+m_gfr_region <- metabin(
+  event.e = e_men,
+  n.e = total_men,
+  event.c = e_women,
+  n.c = total_women,
+  studlab = study_id,
+  data = df_gfr,
+  subgroup = Region,
+
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+m_gfr_region
+```
+
+##### Forest plot
+
+```{r, fig.height=7, fig.width=12, warning=FALSE}
+fp_gfr_region <- as.ggplot(~ forest(
+  m_gfr_region,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE, 
+  digits = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square = "#82abc4",
+  col.diamond = "#285980",
+  col.study.ci = "black",
+  col.inside = "black"
+))
+
+fp_gfr_region
+
+# ggsave("Plots/fp_gfr_region.pdf", fp_gfr_region, width = 12, height = 7, bg = "white")
+```
+
+#### Dataframe
+
+```{r}
+df_fp_gfr_region <- m_gfr_region$data %>%
+  mutate(
+    OR = exp(m_gfr$TE),
+    lower_CI = exp(m_gfr$lower),
+    upper_CI = exp(m_gfr$upper),
+    weight_random = weights(m_gfr)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    Region = Region,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+  )
+```
+
+#### SA: Excluding "Patel, 2013"
+
+```{r}
+df_gfr_sa <- df_gfr %>%
+  filter(study_id != "Patel, 2013")
+
+m_gfr_sa <- metabin(
+  event.e = e_men,
+  n.e = total_men,
+  event.c = e_women,
+  n.c = total_women,
+  studlab = study_id,
+  data = df_gfr_sa,
+
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_gfr_sa)
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=12, warning=FALSE}
+fp_gfr_sa <- as.ggplot(~ forest(
+  m_gfr_sa,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE, digits = 2, digits.sd = 2, digits.mean = 2, digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square = "#82abc4",
+  col.diamond = "#285980",
+  col.study.ci = "black",
+  col.inside = "black"
+))
+
+fp_gfr_sa
+
+# ggsave("Plots/fp_gfr_sa.pdf", fp_gfr_sa, width = 12, height = 4, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+### 2) Mortality: Male vs Female
+
+```{r}
+mor_data <- read_xlsx("METANALYSIS DATA_new_latest.xlsx", 
+                 sheet = "mor_data", skip = 1) %>%
+  
+  # Select only valid columns
+  select(c(1:19)) %>%
+  filter(!is.na(study_id) & outcome == 2) %>%
+  
+  # Convert required columns from character to numerical
+  mutate(across(c(9:10, 17:19), as.numeric)) %>%
+  mutate(
+    TE = log(hr_mor),
+    seTE = (log(upper_CI) - log(lower_CI)) / (2 * 1.96),
+    high_rob = if_else(study_n %in% c("#7054"), 1, 0)
+  )
+```
+
+```{r}
+m_mor_hr <- metagen(
+  TE = TE,
+  seTE = seTE,
+  studlab = study_id,
+  data = mor_data,
+  sm = "HR",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_mor_hr)
+```
+
+#### Forest plot
+
+```{r, fig.height=4, fig.width=12, warning=FALSE}
+fp_death <- as.ggplot(~ forest(
+  m_mor_hr,
+  leftcols = c("studlab", "follow_up", "e_men", "total_men", "e_women", "total_women"),
+  leftlabs = c("Study", "Follow-up\nperiod (years)", "Male\nEvents", "Male\nTotal", "Female\nEvents", "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Hazard Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  smlab = "Hazard Ratio\n(Male vs Female)",
+  colgap = "4mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE, digits = 2, digits.sd = 2, digits.mean = 2, digits.weight = 2,
+  overall.hetstat = TRUE,
+  col.square = "#82abc4",
+  col.diamond = "#285980",
+  col.study.ci = "black",
+  col.inside = "black"
+))
+
+fp_death
+
+# ggsave("Plots/fp_death.pdf", fp_death, width = 12, height = 4, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_mor <- m_mor_hr$data %>%
+  mutate(
+    HR = exp(m_mor_hr$TE),
+    lower_CI = exp(m_mor_hr$lower),
+    upper_CI = exp(m_mor_hr$upper),
+    weight_random = weights(m_mor_hr)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    `Follow-up period (years)` = follow_up,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Hazard Ratio (Male vs Female)` = round(HR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+  )
+```
+
+#### SA excluding high RoB
+
+```{r}
+mor_data_sa <- mor_data %>%
+  filter(high_rob == 0) # Exclude studies with high RoB
+
+m_mor_sa <- metagen(
+  TE = TE,
+  seTE = seTE,
+  studlab = study_id,
+  data = mor_data_sa,
+  sm = "HR",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_mor_sa)
+```
+
+#### Forest plot
+
+```{r, fig.height=4, fig.width=12, warning=FALSE}
+fp_death_sa <- as.ggplot(~ forest(
+  m_mor_sa,
+  leftcols = c("studlab", "follow_up", "e_men", "total_men", "e_women", "total_women"),
+  leftlabs = c("Study", "Follow-up\nperiod (years)", "Male\nEvents", "Male\nTotal", "Female\nEvents", "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Hazard Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  smlab = "Hazard Ratio\n(Male vs Female)",
+  colgap = "4mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE, digits = 2, digits.sd = 2, digits.mean = 2, digits.weight = 2,
+  overall.hetstat = TRUE,
+  col.square = "#82abc4",
+  col.diamond = "#285980",
+  col.study.ci = "black",
+  col.inside = "black"
+))
+
+fp_death_sa
+
+# ggsave("Plots/fp_death_sa.pdf", fp_death_sa, width = 12, height = 4, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_mor_sa <- m_mor_sa$data %>%
+  mutate(
+    HR = exp(m_mor_sa$TE),
+    lower_CI = exp(m_mor_sa$lower),
+    upper_CI = exp(m_mor_sa$upper),
+    weight_random = weights(m_mor_sa)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    `Follow-up period (years)` = follow_up,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Hazard Ratio (Male vs Female)` = round(HR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+  )
+```
+
+------------------------------------------------------------------------
+
+### 3) Kidney failure
+
+#### Primary
+
+```{r}
+kf_data <- read_xlsx("METANALYSIS DATA_new_latest.xlsx",
+                 sheet = "kf_data_new", 
+                 skip = 1) %>%
+  filter(!is.na(study_id)) %>%
+  mutate(high_rob = if_else(study_id %in% c("Gibney, 2008", "Matas, 2018", "Rizvi, 2016", "Kim, 2020"), 1, 0))
+  # filter(study_id != "Matas, 2018")
+
+m_kf <- metabin(
+  event.e = e_male,
+  n.e     = total_male,
+  event.c = e_female,
+  n.c     = total_female,
+  studlab = study_id,
+  data    = kf_data,
+
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_kf)
+```
+
+##### Forest plot
+
+```{r, fig.height=3, fig.width=12, warning=FALSE}
+fp_kf <- as.ggplot(~ forest(
+  m_kf,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_kf
+
+# ggsave("Plots/fp_kf.pdf", fp_kf, width = 12, height = 4.5, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_kf <- m_kf$data %>%
+  mutate(
+    OR = exp(m_kf$TE),
+    lower_CI = exp(m_kf$lower),
+    upper_CI = exp(m_kf$upper),
+    weight_random = weights(m_kf)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    `Male Events` = e_male,
+    `Male Total` = total_male,
+    `Female Events` = e_female,
+    `Female Total` = total_female,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+  )
+```
+
+### 4) Surgical complications
+
+```{r}
+surcom_data <- read_xlsx("METANALYSIS DATA_new_latest.xlsx",
+                 sheet = "surcom_data", skip = 1) %>% 
+  filter(outcome == 2) %>%
+  mutate(across(c(e_men, total_men, e_women, total_women), as.numeric),
+         high_rob = if_else(study_n %in% c("#1727", "#1302", "#1074", "#743", "#4403"), 1, 0),
+         Era = factor(case_when(study_n %in% c("#1727", "#1302", "#743", "#896") ~ "2011-2020",
+                         study_n %in% c("#3751", "#877", "#6317", "#6759") ~ "2021-2026",
+                         study_n %in% c("#1074", "#699", "#4403") ~ "2001-2010")),
+         Region = factor(case_when(study_n %in% c("#1727", "#1074", "#743", "#6317", "#6759") ~ "Europe and Central Asia",
+                              study_n %in% c("#4403") ~ "Latin America and Carribean",
+                              study_n %in% c("#1302") ~ "Sub-Saharan Africa",
+                              study_n %in% c("#3751", "#877") ~ "East Asia and Pacific",
+                              TRUE ~ "North America"))
+         )
+
+m_surcom <- metabin(
+  event.e = e_men,
+  n.e     = total_men,
+  event.c = e_women,
+  n.c     = total_women,
+  studlab = study_id,
+  data    = surcom_data,
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_surcom)
+```
+
+#### Forest plot
+
+```{r, fig.height=4, fig.width=12, warning=FALSE}
+fp_surcom <- as.ggplot(~ forest(
+  m_surcom,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_surcom
+
+# ggsave("Plots/fp_surcom.pdf", fp_surcom, width = 12, height = 4, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_surcom <- m_surcom$data %>%
+  mutate(
+    OR = exp(m_surcom$TE),
+    lower_CI = exp(m_surcom$lower),
+    upper_CI = exp(m_surcom$upper),
+    weight_random = weights(m_surcom)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+  )
+```
+
+#### Funnel plot
+
+```{r}
+funnel(m_surcom)
+```
+
+#### SA excluding high RoB
+
+```{r}
+surcom_data_sa <- surcom_data %>%
+  filter(high_rob == 0)
+
+m_surcom_sa <- metabin(
+  event.e = e_men,
+  n.e     = total_men,
+  event.c = e_women,
+  n.c     = total_women,
+  studlab = study_id,
+  data    = surcom_data_sa,
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_surcom_sa)
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=12, warning=FALSE}
+fp_surcom_sa <- as.ggplot(~ forest(
+  m_surcom_sa,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+)) + 
+  ggtitle(label = "Surgical complications",
+  subtitle = "Excluding studies with high risk of bias") +
+  theme(
+    plot.title = element_text(hjust = 0, size = 14, face = "bold"), 
+    plot.subtitle = element_text(hjust = 0, size = 12), 
+    margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm"))
+
+fp_surcom_sa
+
+# ggsave("Plots/fp_surcom_sa.pdf", fp_surcom_sa, width = 12, height = 4, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_surcom_sa <- m_surcom_sa$data %>%
+  mutate(
+    OR = exp(m_surcom_sa$TE),
+    lower_CI = exp(m_surcom_sa$lower),
+    upper_CI = exp(m_surcom_sa$upper),
+    weight_random = weights(m_surcom_sa)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+  )
+```
+
+#### By Time Era
+
+```{r}
+m_surcom_by_era <- metabin(
+  event.e = e_men,
+  n.e     = total_men,
+  event.c = e_women,
+  n.c     = total_women,
+  studlab = study_id,
+  data    = surcom_data,
+  subgroup = Era,
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_surcom_by_era)
+```
+
+##### Forest plot
+
+```{r, fig.height=8, fig.width=12, warning=FALSE}
+fp_surcom_by_era <- as.ggplot(~ forest(
+  m_surcom_by_era,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_surcom_by_era
+
+# ggsave("Plots/fp_surcom_by_era.pdf", fp_surcom_by_era, height = 8, width = 12, bg = "white")
+
+```
+
+##### Dataframe
+
+```{r}
+df_fp_surcom_by_era <- m_surcom_by_era$data %>%
+  mutate(
+    OR = exp(m_surcom_by_era$TE),
+    lower_CI = exp(m_surcom_by_era$lower),
+    upper_CI = exp(m_surcom_by_era$upper),
+    weight_random = weights(m_surcom_by_era)$p.random
+  ) %>%
+  transmute(
+    Era = Era,
+    Study = study_id,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+    `Weight` = paste(round(weight_random, 1), "%")
+  ) %>%
+  arrange(Era)
+```
+
+#### By region
+
+```{r}
+m_surcom_by_region <- metabin(
+  event.e = e_men,
+  n.e     = total_men,
+  event.c = e_women,
+  n.c     = total_women,
+  studlab = study_id,
+  data    = surcom_data,
+  subgroup = Region,
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_surcom_by_region)
+```
+
+##### Forest plot
+
+```{r, fig.height=9, fig.width=12, warning=FALSE}
+fp_surcom_by_region <- as.ggplot(~ forest(
+  m_surcom_by_region,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+
+fp_surcom_by_region
+
+# ggsave("Plots/fp_surcom_by_region.pdf", fp_surcom_by_region, height = 9, width = 12, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_surcom_by_region <- m_surcom_by_region$data %>%
+  mutate(
+    OR = exp(m_surcom_by_era$TE),
+    lower_CI = exp(m_surcom_by_era$lower),
+    upper_CI = exp(m_surcom_by_era$upper),
+    weight_random = weights(m_surcom_by_era)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    Region = Region,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+    `Weight` = paste(round(weight_random, 1), "%")
+  ) %>%
+  arrange(Region)
+```
+
+------------------------------------------------------------------------
+
+### 5) Renal compensation
+
+```{r}
+renalcom_data <- read_xlsx("METANALYSIS DATA_new_latest.xlsx",
+                 sheet = "rencom_data", skip = 1) %>% 
+  filter(outcome == 2) %>%
+  mutate(
+    study_n = trimws(study_n),
+    Era = factor(case_when(study_n %in% c("# 193", "#300", "#458", "#150")~ "2011-2020",
+                           TRUE ~ "2021-2026")),
+    Region = factor(case_when(
+      study_n %in% c("# 193", "#150")~ "East Asia and Pacific",
+      study_n %in% c("#458", "#7157", "#7961")~ "Europe and Central Asia",
+      study_n == "#300" ~ "Middle-east, North-Africa, Afganistan and Pakistan",
+      study_n == "#6926" ~ "Latin-America and Carribean",
+      study_n == "#7873" ~ "South Asia"
+    )))
+
+m_renalcom <- metabin(
+  event.e = e_men,
+  n.e     = total_men,
+  event.c = e_women,
+  n.c     = total_women,
+  studlab = study_id,
+  data    = renalcom_data,
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci")
+)
+
+summary(m_renalcom)
+```
+
+#### Forest plot
+
+```{r, fig.height=4, fig.width=12, warning=FALSE}
+fp_renalcom <- as.ggplot(~ forest(
+  m_renalcom,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_renalcom
+
+# ggsave("Plots/fp_renalcom.pdf", fp_renalcom, width = 12, height = 4, bg = "white")
+```
+
+```{r, include=FALSE}
+sex_renalcom_or <- escalc(
+  measure = "OR",
+  ai = e_men, bi = ne_men,
+  ci = e_women, di = ne_women,
+  slab = paste(study_id),
+  drop00 = TRUE,
+  data = renalcom_data
+)
+
+sex_renalcom_res1 <- rma(yi, vi, data= sex_renalcom_or)
+
+```
+
+##### Dataframe
+
+```{r}
+df_fp_renalcom <- m_renalcom$data %>%
+  mutate(
+    OR = exp(m_renalcom$TE),
+    lower_CI = exp(m_renalcom$lower),
+    upper_CI = exp(m_renalcom$upper),
+    weight_random = weights(m_renalcom)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+    `Weight` = paste(round(weight_random, 1), "%")
+  )
+```
+
+#### By Era
+
+```{r}
+m_renalcom_era <- metabin(
+  event.e = e_men,
+  n.e     = total_men,
+  event.c = e_women,
+  n.c     = total_women,
+  studlab = study_id,
+  data    = renalcom_data,
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci"),
+  subgroup = Era
+)
+
+summary(m_renalcom_era)
+```
+
+##### Forest plot
+
+```{r, fig.height=6, fig.width=12, warning=FALSE}
+fp_renalcom_era <- as.ggplot(~ forest(
+  m_renalcom_era,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_renalcom_era
+
+# ggsave("Plots/fp_renalcom_era.pdf", fp_renalcom_era, width = 12, height = 6, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_renalcom_era <- m_renalcom_era$data %>%
+  mutate(
+    OR = exp(m_renalcom$TE),
+    lower_CI = exp(m_renalcom$lower),
+    upper_CI = exp(m_renalcom$upper),
+    weight_random = weights(m_renalcom)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    Era = Era,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+    `Weight` = paste(round(weight_random, 1), "%")
+  )
+```
+
+#### By Region
+
+```{r}
+m_renalcom_region <- metabin(
+  event.e = e_men,
+  n.e     = total_men,
+  event.c = e_women,
+  n.c     = total_women,
+  studlab = study_id,
+  data    = renalcom_data,
+  sm = "OR",
+  method = "Inverse",
+  method.tau = "REML",
+  method.random.ci = gs("method.random.ci"),
+  subgroup = Region
+)
+
+summary(m_renalcom_region)
+```
+
+##### Forest plot
+
+```{r, fig.height=6, fig.width=12, warning=FALSE}
+fp_renalcom_region <- as.ggplot(~ forest(
+  m_renalcom_region,
+  leftcols = c("studlab", "event.e", "n.e", "event.c", "n.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nEvents", 
+    "Male\nTotal",
+    "Female\nEvents", 
+    "Female\nTotal"),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("Odds Ratio\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "1cm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "Odds Ratio\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_renalcom_region
+
+# ggsave("Plots/fp_renalcom_region.pdf", fp_renalcom_region, width = 12, height = 6, bg = "white")
+```
+
+##### Dataframe
+
+```{r}
+df_fp_renalcom_region <- m_renalcom_region$data %>%
+  mutate(
+    OR = exp(m_renalcom$TE),
+    lower_CI = exp(m_renalcom$lower),
+    upper_CI = exp(m_renalcom$upper),
+    weight_random = weights(m_renalcom)$p.random
+  ) %>%
+  transmute(
+    Study = study_id,
+    Region = Region,
+    `Male Events` = e_men,
+    `Male Total` = total_men,
+    `Female Events` = e_women,
+    `Female Total` = total_women,
+    `Odds Ratio (Male vs Female)` = round(OR, 2),
+    `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+    `Weight` = paste(round(weight_random, 1), "%")
+  )
+```
+
+------------------------------------------------------------------------
+
+### 6) QoL
+
+Every study included on QoL have high risk of bias, so no sensitivity analysis was done.
+
+#### Men
+
+```{r}
+qol_data <- read_excel("METANALYSIS DATA_new_latest.xlsx", sheet = "qol_data_mod", skip = 1) %>%
+  filter(!is.na(study_id)) %>%
+  mutate(
+    across(everything(), ~replace(.x, .x == " " | .x == "" | .x== " ", NA)),
+    study = trimws(as.character(study_id)),
+    Era = factor(case_when(
+      study_n %in% c("#4403") ~ "2001-2010",
+      study_n %in% c("#5818", "#18", "#199", "#894", "#134") ~ "2011-2020",
+      study_n %in% c("#7658") ~ "2021-2026")),
+    Region = factor(case_when(
+      study_n %in% c("#5818", "#18", "#199", "#7658", "#134") ~ "Europe and central Asia",
+      study_n %in% c("#894") ~ "East Asia and Pacific",
+      TRUE ~ "Latin-America and Carribean"))
+    )
+
+domains <- c("pcs","mcs","gh","sf","vi","bp","rp","pf","mh","re")
+
+results_men_meta <- data.frame(
+  domain = character(), k = integer(),
+  pooled_mean = numeric(), ci_lb = numeric(), ci_ub = numeric(),
+  I2 = numeric(), tau2 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (d in domains) {
+  mean_col <- paste0(d, "_men_mean")
+  sd_col   <- paste0(d, "_men_sd")
+
+  sub <- qol_data %>%
+    transmute(
+      study = study,
+      n = as.numeric(total_men),
+      mean = as.numeric(.data[[mean_col]]),
+      sd = as.numeric(.data[[sd_col]])
+    ) %>%
+    filter(complete.cases(.)) 
+
+  if (nrow(sub) < 2) next
+
+  m <- metamean(
+    n = n,
+    mean = mean,
+    sd = sd,
+    studlab = study,
+    data = sub,
+    sm = "MRAW",
+    common = FALSE,
+    random = TRUE,
+    method.tau = "REML",
+    method.random.ci = "classic"  # aligns with standard normal-approx random CI
+  )
+
+  results_men_meta <- rbind(
+    results_men_meta,
+    data.frame(
+      domain = d,
+      k = m$k,
+      pooled_mean = as.numeric(m$TE.random),
+      ci_lb = as.numeric(m$lower.random),
+      ci_ub = as.numeric(m$upper.random),
+      I2 = as.numeric(m$I2),
+      tau2 = as.numeric(m$tau^2),
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+results_men_meta
+```
+
+------------------------------------------------------------------------
+
+#### Women
+
+```{r}
+results_women_meta <- data.frame(
+  domain = character(), k = integer(),
+  pooled_mean = numeric(), ci_lb = numeric(), ci_ub = numeric(),
+  I2 = numeric(), tau2 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (d in domains) {
+  mean_col <- paste0(d, "_women_mean")
+  sd_col   <- paste0(d, "_women_sd")
+
+  sub <- qol_data %>%
+    transmute(
+      study = study,
+      n = as.numeric(total_women),
+      mean = as.numeric(.data[[mean_col]]),
+      sd = as.numeric(.data[[sd_col]])
+    ) %>%
+    filter(complete.cases(.)) 
+
+  if (nrow(sub) < 2) next
+
+  m <- metamean(
+    n = n,
+    mean = mean,
+    sd = sd,
+    studlab = study,
+    data = sub,
+    sm = "MRAW",
+    common = FALSE,
+    random = TRUE,
+    method.tau = "REML",
+    method.random.ci = "classic"  # aligns with standard normal-approx random CI
+  )
+
+  results_women_meta <- rbind(
+    results_women_meta,
+    data.frame(
+      domain = d,
+      k = m$k,
+      pooled_mean = as.numeric(m$TE.random),
+      ci_lb = as.numeric(m$lower.random),
+      ci_ub = as.numeric(m$upper.random),
+      I2 = as.numeric(m$I2),
+      tau2 = as.numeric(m$tau^2),
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+results_women_meta
+```
+
+------------------------------------------------------------------------
+
+#### Standard mean difference
+
+```{r}
+results_smd_meta <- data.frame(
+  domain = character(), k = integer(),
+  SMD = numeric(), ci_lb = numeric(), ci_ub = numeric(),
+  I2 = numeric(), tau2 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (d in domains) {
+
+  m1 <- paste0(d, "_men_mean");   s1 <- paste0(d, "_men_sd")
+  m2 <- paste0(d, "_women_mean"); s2 <- paste0(d, "_women_sd")
+
+  sub <- qol_data %>%
+    transmute(
+      study  = study,
+      n_men  = as.numeric(total_men),
+      m_men  = as.numeric(.data[[m1]]),
+      sd_men = as.numeric(.data[[s1]]),
+      n_wom  = as.numeric(total_women),
+      m_wom  = as.numeric(.data[[m2]]),
+      sd_wom = as.numeric(.data[[s2]])
+    ) %>%
+    filter(complete.cases(.))
+
+  if (nrow(sub) < 2) next
+
+  m <- metacont(
+    n.e = n_men, mean.e = m_men, sd.e = sd_men,
+    n.c = n_wom, mean.c = m_wom, sd.c = sd_wom,
+    studlab = study,
+    data = sub,
+
+    sm = "SMD",
+    method.smd = "Hedges",
+    common = FALSE,
+    random = TRUE,
+    method.tau = "REML",
+    method.random.ci = "classic"
+  )
+
+  results_smd_meta <- rbind(
+    results_smd_meta,
+    data.frame(
+      domain = d,
+      k = m$k,
+      SMD = as.numeric(m$TE.random),
+      ci_lb = as.numeric(m$lower.random),
+      ci_ub = as.numeric(m$upper.random),
+      I2 = as.numeric(m$I2),
+      tau2 = as.numeric(m$tau^2),
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+results_smd_meta
+```
+
+------------------------------------------------------------------------
+
+#### General Health
+
+```{r}
+dom <- "gh"
+
+gh_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men= as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom= as.numeric(qol_data[[paste0(dom, "_women_sd")]]),
+  Era = qol_data$Era,
+  Region = qol_data$Region
+) %>%
+  filter(complete.cases(.))
+
+m_gh <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = gh_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_gh
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_gh <- as.ggplot(~ forest(
+  m_gh,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_gh
+
+# ggsave("Plots/fp_gh.pdf", fp_gh, width = 13, height = 4, bg = "white")
+```
+
+##### By time era
+
+```{r}
+m_gh_era <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = gh_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Era
+)
+
+m_gh_era
+```
+
+###### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_gh_era <- as.ggplot(~ forest(
+  m_gh_era,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_gh_era
+
+# ggsave("Plots/fp_gh_era.pdf", fp_gh_era, width = 13, height = 4, bg = "white")
+```
+
+##### By region
+
+```{r}
+m_gh_region <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = gh_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Region
+)
+
+m_gh_region
+```
+
+###### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_gh_region <- as.ggplot(~ forest(
+  m_gh_region,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_gh_region
+
+# ggsave("Plots/fp_gh_region.pdf", fp_gh_region, width = 13, height = 4, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+#### Social functioning
+
+```{r}
+dom <- "sf"
+
+sf_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men= as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom= as.numeric(qol_data[[paste0(dom, "_women_sd")]])
+) %>%
+  filter(complete.cases(.))
+
+m_sf <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = sf_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_sf
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_sf <- as.ggplot(~ forest(
+  m_sf,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_sf
+
+# ggsave("Plots/fp_sf.pdf", fp_sf, width = 13, height = 4, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+#### Vitality
+
+```{r}
+dom <- "vi"
+
+vi_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men= as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom= as.numeric(qol_data[[paste0(dom, "_women_sd")]]),
+  Era = qol_data$Era,
+  Region = qol_data$Region
+) %>%
+  filter(complete.cases(.))
+
+m_vi <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = vi_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_vi
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_vi <- as.ggplot(~ forest(
+  m_vi,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_vi
+
+# ggsave("Plots/fp_vi.pdf", fp_vi, width = 13, height = 4, bg = "white")
+```
+
+##### By time era
+
+```{r}
+m_vi_era <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = vi_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Era
+)
+
+m_vi_era
+```
+
+###### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_vi_era <- as.ggplot(~ forest(
+  m_vi_era,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_vi_era
+
+# ggsave("Plots/fp_vi_era.pdf", fp_vi_era, width = 13, height = 4, bg = "white")
+```
+
+##### By region
+
+```{r}
+m_vi_region <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = vi_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Region
+)
+
+m_vi_region
+```
+
+###### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_vi_region <- as.ggplot(~ forest(
+  m_vi_region,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_vi_region
+
+# ggsave("Plots/fp_vi_region.pdf", fp_vi_region, width = 13, height = 4, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+#### Bodily pain
+
+```{r}
+dom <- "bp"
+
+bp_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men= as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom= as.numeric(qol_data[[paste0(dom, "_women_sd")]])
+) %>%
+  filter(complete.cases(.))
+
+m_bp <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = bp_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_bp
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_bp <- as.ggplot(~ forest(
+  m_bp,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_bp
+
+# ggsave("Plots/fp_bp.pdf", fp_bp, width = 13, height = 4, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+#### Role Physical
+
+```{r}
+dom <- "rp"
+
+rp_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men= as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom= as.numeric(qol_data[[paste0(dom, "_women_sd")]])
+) %>%
+  filter(complete.cases(.))
+
+m_rp <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = rp_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_rp
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_rp <- as.ggplot(~ forest(
+  m_rp,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_rp
+
+# ggsave("Plots/fp_rp.pdf", fp_rp, width = 13, height = 4, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+#### Physical functioning
+
+```{r}
+dom <- "pf"
+
+pf_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men= as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom= as.numeric(qol_data[[paste0(dom, "_women_sd")]]),
+  Era = qol_data$Era,
+  Region = qol_data$Region
+) %>%
+  filter(complete.cases(.))
+
+m_pf <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = pf_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_pf
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_pf <- as.ggplot(~ forest(
+  m_pf,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_pf
+
+# ggsave("Plots/fp_pf.pdf", fp_pf, width = 13, height = 4, bg = "white")
+```
+
+##### By time era
+
+```{r}
+m_pf_era <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = pf_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Era
+)
+
+m_pf_era
+```
+
+###### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_pf_era <- as.ggplot(~ forest(
+  m_pf_era,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_pf_era
+
+# ggsave("Plots/fp_pf_era.pdf", fp_pf_era, width = 13, height = 4, bg = "white")
+```
+
+##### By region
+
+```{r}
+m_pf_region <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = pf_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Region
+)
+
+m_pf_region
+```
+
+###### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_pf_region <- as.ggplot(~ forest(
+  m_pf_region,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_pf_region
+
+# ggsave("Plots/fp_pf_region.pdf", fp_pf_region, width = 13, height = 4, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+#### Mental health
+
+```{r}
+dom <- "mh"
+
+mh_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men= as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom= as.numeric(qol_data[[paste0(dom, "_women_sd")]]),
+  Era = qol_data$Era,
+  Region = qol_data$Region
+) %>%
+  filter(complete.cases(.))
+
+m_mh <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = mh_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_mh
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_mh <- as.ggplot(~ forest(
+  m_mh,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_mh
+
+# ggsave("Plots/fp_mh.pdf", fp_mh, width = 13, height = 4, bg = "white")
+```
+
+##### By time era
+
+```{r}
+m_mh_era <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = mh_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Era
+)
+
+m_mh_era
+```
+
+###### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_mh_era <- as.ggplot(~ forest(
+  m_mh_era,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_mh_era
+
+# ggsave("Plots/fp_mh_era.pdf", fp_mh_era, width = 13, height = 4, bg = "white")
+```
+
+##### By region
+
+```{r}
+m_mh_region <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = mh_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Region
+)
+
+m_mh_region
+```
+
+###### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_mh_region <- as.ggplot(~ forest(
+  m_mh_region,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_mh_region
+
+# ggsave("Plots/fp_mh_region.pdf", fp_mh_region, width = 13, height = 4, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+#### Role emotional
+
+```{r}
+dom <- "re"
+
+re_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men= as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom= as.numeric(qol_data[[paste0(dom, "_women_sd")]])
+) %>%
+  filter(complete.cases(.))
+
+m_re <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = re_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_re
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_re <- as.ggplot(~ forest(
+  m_re,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,   digits = 2,   digits.sd = 2,   digits.mean = 2,   digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_re
+
+# ggsave("Plots/fp_re.pdf", fp_re, width = 13, height = 4, bg = "white")
+```
+
+#### PCS
+
+```{r}
+dom <- "pcs"
+
+pcs_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men = as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom = as.numeric(qol_data[[paste0(dom, "_women_sd")]]),
+  Era = qol_data$Era,
+  Region = qol_data$Region
+) %>%
+  filter(complete.cases(.))
+
+m_pcs <- metacont(
+  n.e = n_men,
+  mean.e = m_men,
+  sd.e = sd_men,
+  n.c = n_wom,
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = pcs_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_pcs
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_pcs <- as.ggplot(~ forest(
+  m_pcs,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,
+  digits = 2,
+  digits.sd = 2,
+  digits.mean = 2,
+  digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square = "#82abc4",
+  col.diamond = "#285980",
+  col.study.ci = "black",
+  col.inside = "black"
+))
+
+fp_pcs
+
+# ggsave("Plots/fp_pcs.pdf", fp_pcs, width = 13, height = 4, bg = "white")
+```
+
+##### By Era
+
+```{r}
+m_pcs_era <- metacont(
+  n.e = n_men,  
+  mean.e = m_men,  
+  sd.e = sd_men,
+  n.c = n_wom,  
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = pcs_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Era
+)
+
+m_pcs_era
+```
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_pcs_era <- as.ggplot(~ forest(
+  m_pcs_era,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,
+  digits = 2,
+  digits.sd = 2,
+  digits.mean = 2,
+  digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_pcs_era
+```
+
+##### By Region
+
+```{r}
+m_pcs_region <- metacont(
+  n.e = n_men,
+  mean.e = m_men,
+  sd.e = sd_men,
+  n.c = n_wom,
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = pcs_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Region
+)
+
+m_pcs_region
+```
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_pcs_region <- as.ggplot(~ forest(
+  m_pcs_region,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,
+  digits = 2,
+  digits.sd = 2,
+  digits.mean = 2,
+  digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_pcs_region
+```
+
+#### MCS
+
+```{r}
+dom <- "mcs"
+
+mcs_data <- data.frame(
+  study = qol_data$study,
+  n_men = as.numeric(qol_data$total_men),
+  m_men = as.numeric(qol_data[[paste0(dom, "_men_mean")]]),
+  sd_men = as.numeric(qol_data[[paste0(dom, "_men_sd")]]),
+  n_wom = as.numeric(qol_data$total_women),
+  m_wom = as.numeric(qol_data[[paste0(dom, "_women_mean")]]),
+  sd_wom = as.numeric(qol_data[[paste0(dom, "_women_sd")]]),
+  Era = qol_data$Era,
+  Region = qol_data$Region
+) %>%
+  filter(complete.cases(.))
+
+m_mcs <- metacont(
+  n.e = n_men,
+  mean.e = m_men,
+  sd.e = sd_men,
+  n.c = n_wom,
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = mcs_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic"
+)
+
+m_mcs
+```
+
+##### Forest plot
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_mcs <- as.ggplot(~ forest(
+  m_mcs,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,
+  digits = 2,
+  digits.sd = 2,
+  digits.mean = 2,
+  digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square = "#82abc4",
+  col.diamond = "#285980",
+  col.study.ci = "black",
+  col.inside = "black"
+))
+
+fp_mcs
+
+# ggsave("Plots/fp_mcs.pdf", fp_mcs, width = 13, height = 4, bg = "white")
+```
+
+##### By Era
+
+```{r}
+m_mcs_era <- metacont(
+  n.e = n_men,
+  mean.e = m_men,
+  sd.e = sd_men,
+  n.c = n_wom,
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = mcs_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Era
+)
+
+m_mcs_era
+```
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_mcs_era <- as.ggplot(~ forest(
+  m_mcs_era,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,
+  digits = 2,
+  digits.sd = 2,
+  digits.mean = 2,
+  digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_mcs_era
+```
+
+##### By Region
+
+```{r}
+m_mcs_region <- metacont(
+  n.e = n_men,
+  mean.e = m_men,
+  sd.e = sd_men,
+  n.c = n_wom,
+  mean.c = m_wom,
+  sd.c = sd_wom,
+  studlab = study,
+  data = mcs_data,
+  sm = "SMD",
+  method.smd = "Hedges",
+  common = FALSE,
+  random = TRUE,
+  method.tau = "REML",
+  method.random.ci = "classic",
+  subgroup = Region
+)
+
+m_mcs_region
+```
+
+```{r, fig.height=4, fig.width=13, warning=FALSE}
+fp_mcs_region <- as.ggplot(~ forest(
+  m_mcs_region,
+  leftcols = c("studlab", "n.e", "mean.e", "sd.e", "n.c", "mean.c", "sd.c"),
+  leftlabs = c(
+    "Study",
+    "Male\nN", "Male\nMean", "Male\nSD",
+    "Female\nN", "Female\nMean", "Female\nSD"
+  ),
+  rightcols = c("effect", "ci", "w.random"),
+  rightlabs = c("SMD\n(Male vs Female)", "95% CI", "Weight"),
+  colgap = "6mm",
+  print.I2 = TRUE,
+  print.tau2 = TRUE,
+  print.Q = TRUE,
+  overall = TRUE,
+  digits = 2,
+  digits.sd = 2,
+  digits.mean = 2,
+  digits.weight = 2,
+  overall.hetstat = TRUE,
+  label.e = "Male",
+  label.c = "Female",
+  smlab = "SMD\n(Male vs Female)",
+  col.square   = "#82abc4",
+  col.diamond  = "#285980",
+  col.study.ci = "black",
+  col.inside   = "black"
+))
+
+fp_mcs_region
+```
+
+------------------------------------------------------------------------
+
+## Combined forest plot
+
+[BMJ guide](https://bmjmedicine.bmj.com/bmjmedicine/wp-content/uploads/sites/66/2023/06/BMJMED-style-formatting-checklist-for-original-research-pre-acceptance-1.pdf)
+
+**IMPORTANT FOR FOREST PLOT FIGURES:** Provide typed out data for any forest plots in a table format in a Word document (see Appendix 3), to avoid the introduction of errors when figures are redrawn.\
+These data are not the underlying data that make up the plots themselves, but are the actual numbers that appear next to the forest plots in the figure. Do not provide typed out data for forest plots in web only material. Present confidence intervals in the format “xx to xx” (not “xx, xx” or “xx-xx”)
+
+### F3) Main outcomes
+
+```{r, fig.height=13.5, fig.width=12, warning=FALSE}
+blank <- ggplot() + theme_void()
+
+main_f1 <- ggarrange(
+  fp_death + ggtitle("A) Mortality") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_kf + ggtitle("B) Kidney failure") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_gfr + ggtitle("C) Chronic kidney disease") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_renalcom + ggtitle("D) Renal compensation") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"),margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  ncol = 1,
+  heights = c(0.7, 0.03, 0.7, 0.03, 0.9, 0.03, 0.8)
+  )
+
+main_f1
+# ggsave("Plots/F3_ForestPlots.pdf", main_f1, width = 12, height = 13.5, bg = "white")
+# ggsave("Final plots/F3_ForestPlots.pdf", main_f1, width = 12, height = 13.5, bg = "white")
+```
+
+#### Dataframe
+
+Export the data for redrawing as per BMJ requirements:
+
+```{r}
+write_xlsx(
+  list(
+    Mortality = df_fp_mor,
+    Kidney_Failure = df_fp_kf,
+    CKD = df_fp_gfr,
+    Renal_Compensation = df_fp_renalcom
+  ),
+  "Forest_Plots_Data/Figure_3_data.xlsx"
+)
+```
+
+### Supp.F1) Sensitivity analyses
+
+```{r, fig.height=6.5, fig.width=12}
+supp_f1_fp_rob <- ggarrange(
+  fp_death_sa + ggtitle("A) Mortality: Excluding studies with high risk of bias") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold", margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm"))),
+  blank,
+  fp_gfr_sa + ggtitle("B) Chronic kidney disease: Excluding a large study") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold", margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm"))),
+  ncol = 1,
+  heights = c(0.75, 0.1, 1)
+  )
+
+supp_f1_fp_rob
+
+# ggsave("Plots/Supp_f1_SA.pdf", supp_f1_fp_rob, width = 12, height = 6.5, bg = "white")
+# ggsave("Final plots/Supp_f1_SA.pdf", supp_f1_fp_rob, width = 12, height = 6.5, bg = "white")
+```
+
+### Supp.F4) Surgical outcomes
+
+```{r, fig.height=8, fig.width=12}
+supp_f2_surcom <- ggarrange(
+  fp_surcom + ggtitle("A) Surgical complications") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold", margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm"))),
+  blank,
+  fp_surcom_sa + ggtitle("B) Surgical complications") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold", margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm"))),
+  # blank,
+  # fp_surcom_by_era + ggtitle("C) Surgical complications") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold", margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm"))),
+  ncol = 1,
+  heights = c(0.9, 0.05, 0.75)
+  )
+
+supp_f2_surcom
+
+# ggsave("Plots/Supp_f4_surcom.pdf", supp_f2_surcom, width = 12, height = 8, bg = "white")
+# ggsave("Final plots/Supp_f4_surcom.pdf", supp_f2_surcom, width = 12, height = 8, bg = "white")
+```
+
+#### Dataframe
+
+```{r}
+write_xlsx(
+  list(
+    Surcom = df_fp_surcom,
+    SensitivityAnalysis = df_fp_surcom_sa
+    # By_era = df_fp_surcom_by_era
+  ),
+  "Forest_Plots_Data/S4_SurCom_fp_data.xlsx"
+)
+```
+
+------------------------------------------------------------------------
+
+### Supp.F6) QoL
+
+```{r, fig.height=15, fig.width=26, warning=FALSE}
+# 2 columns
+
+blank <- ggplot() + theme_void()
+
+main_f2_v2 <- ggarrange(
+  fp_gh + ggtitle("A) General health") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_sf + ggtitle("B) Social functioning") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_vi + ggtitle("C) Vitality") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_bp + ggtitle("D) Bodily pain") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_rp + ggtitle("E) Role physical") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_pf + ggtitle("F) Physical functioning") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_mh + ggtitle("G) Mental health") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_re + ggtitle("H) Role emotional") + theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_pcs + ggtitle("I) Physical component summary") +
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"),
+          margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  fp_mcs + ggtitle("J) Mental component summary") +
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"),
+          margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+  ncol = 2,
+  nrow = 5
+  )
+
+main_f2_v2
+
+# ggsave("Plots/Supp_F6_QoL_ForestPlots.pdf", main_f2_v2, width = 26, height = 15, bg = "white")
+# ggsave("Final plots/Supp_F6_QoL_ForestPlots.pdf", main_f2_v2, width = 26, height = 15, bg = "white")
+
+ggsave(
+  "Final plots/Supp_F6_QoL_ForestPlots.jpg",
+  main_f2_v2,
+  width = 26,
+  height = 15,
+  units = "in",
+  dpi = 300,
+  bg = "white"
+)
+```
+
+#### Dataframe
+
+```{r}
+extract_smd_df <- function(meta_obj,
+                           effect_label = "SMD (Male vs Female)") {
+  
+  meta_obj$data %>%
+    mutate(
+      SMD = meta_obj$TE,
+      lower_CI = meta_obj$lower,
+      upper_CI = meta_obj$upper,
+      weight_random = weights(meta_obj)$p.random
+    ) %>%
+    transmute(
+      Study = study,
+      `Male N` = n_men,
+      `Male Mean` = m_men,
+      `Male SD` = sd_men,
+      `Female N` = n_wom,
+      `Female Mean` = m_wom,
+      `Female SD` = sd_wom,
+      !!effect_label := round(SMD, 2),
+      `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+    )
+}
+
+df_fp_gh <- extract_smd_df(m_gh)
+df_fp_sf <- extract_smd_df(m_sf)
+df_fp_vi <- extract_smd_df(m_vi)
+df_fp_bp <- extract_smd_df(m_bp)
+
+df_fp_rp <- extract_smd_df(m_rp)
+df_fp_pf <- extract_smd_df(m_pf)
+df_fp_mh <- extract_smd_df(m_mh)
+df_fp_re <- extract_smd_df(m_re)
+
+write_xlsx(
+  list(
+    GeneralHealth = df_fp_gh,
+    SocialFunctioning = df_fp_sf,
+    Vitality = df_fp_vi,
+    BodilyPain = df_fp_bp,
+    RolePhysical = df_fp_rp,
+    Physicalfunctioning = df_fp_pf,
+    MentalHealth = df_fp_mh,
+    RoleEmptional = df_fp_re
+  ),
+  "Forest_Plots_Data/S6_QoL_fp_data.xlsx"
+)
+```
+
+------------------------------------------------------------------------
+
+### Supp. F2) Subgroup by era
+
+```{r, fig.height=19, fig.width=12, warning=FALSE}
+blank <- ggplot() + theme_void()
+
+fp_by_era <- ggarrange(
+  fp_gfr_era + ggtitle("A) Chronic kidney disease") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_surcom_by_era + ggtitle("B) Surgical complications") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_renalcom_era + ggtitle("C) Renal compensation") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  ncol = 1,
+  heights = c(1.15, 0.03, 1.4, 0.03, 1)
+  )
+
+fp_by_era
+# ggsave("Plots/Supp_f2_by_era.pdf", fp_by_era, width = 12, height = 19, bg = "white")
+# ggsave("Final plots/Supp_f2_by_era.pdf", fp_by_era, width = 12, height = 19, bg = "white")
+```
+
+#### Dataframe
+
+Export the data for redrawing as per BMJ requirements:
+
+```{r}
+write_xlsx(
+  list(
+    CKD_Era = df_fp_gfr_era,
+    Surcom_Era = df_fp_surcom_by_era,
+    Renal_Compensation_Era = df_fp_renalcom_era,
+    CKD_Region = df_fp_gfr_region,
+    Surcom_Region = df_fp_surcom_by_region,
+    Renal_Compensation_Region = df_fp_renalcom_region
+  ),
+  "Forest_Plots_Data/S2-3_Subgroup_MainOutcomes.xlsx"
+)
+```
+
+------------------------------------------------------------------------
+
+### Supp. F3) Subgroup by Region
+
+```{r, fig.height=21, fig.width=12, warning=FALSE}
+blank <- ggplot() + theme_void()
+
+fp_by_region <- ggarrange(
+  fp_gfr_region + ggtitle("A) Chronic kidney disease") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_surcom_by_region + ggtitle("B) Surgical complications") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_renalcom_region + ggtitle("C) Renal compensation") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  ncol = 1,
+  heights = c(1.15, 0.03, 1.4, 0.03, 1)
+  )
+
+fp_by_region
+
+# ggsave("Plots/Supp_f3_by_region.pdf", fp_by_region, width = 12, height = 21, bg = "white")
+# ggsave("Final plots/Supp_f3_by_region.pdf", fp_by_region, width = 12, height = 21, bg = "white")
+```
+
+------------------------------------------------------------------------
+
+### Supp. F7) QoL by Era
+
+```{r, fig.height=18, fig.width=13, warning=FALSE}
+blank <- ggplot() + theme_void()
+
+fp_qol_by_era <- ggarrange(
+  fp_gh_era + ggtitle("A) General health") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_vi_era + ggtitle("B) Vitality") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_pf_era + ggtitle("C) Physical functioning") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_mh_era + ggtitle("D) Mental health") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  ncol = 1,
+  heights = c(1, 0.03, 1, 0.03, 1, 0.03, 1)
+  )
+
+fp_qol_by_era
+
+# ggsave("Plots/Supp_f7_qol_by_era.pdf", fp_qol_by_era, width = 13, height = 18, bg = "white")
+# ggsave("Final plots/Supp_f7_qol_by_era.pdf", fp_qol_by_era, width = 13, height = 18, bg = "white")
+```
+
+#### Dataframe
+
+```{r}
+extract_smd_df_era <- function(meta_obj,
+                           effect_label = "SMD (Male vs Female)") {
+  
+  meta_obj$data %>%
+    mutate(
+      SMD = meta_obj$TE,
+      lower_CI = meta_obj$lower,
+      upper_CI = meta_obj$upper,
+      weight_random = weights(meta_obj)$p.random
+    ) %>%
+    transmute(
+      Era = Era,
+      Study = study,
+      `Male N` = n_men,
+      `Male Mean` = m_men,
+      `Male SD` = sd_men,
+      `Female N` = n_wom,
+      `Female Mean` = m_wom,
+      `Female SD` = sd_wom,
+      !!effect_label := round(SMD, 2),
+      `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+    )
+}
+
+extract_smd_df_region <- function(meta_obj,
+                           effect_label = "SMD (Male vs Female)") {
+  
+  meta_obj$data %>%
+    mutate(
+      SMD = meta_obj$TE,
+      lower_CI = meta_obj$lower,
+      upper_CI = meta_obj$upper,
+      weight_random = weights(meta_obj)$p.random
+    ) %>%
+    transmute(
+      Region = Region,
+      Study = study,
+      `Male N` = n_men,
+      `Male Mean` = m_men,
+      `Male SD` = sd_men,
+      `Female N` = n_wom,
+      `Female Mean` = m_wom,
+      `Female SD` = sd_wom,
+      !!effect_label := round(SMD, 2),
+      `95% CI` = sprintf("[%.2f; %.2f]", lower_CI, upper_CI),
+      `Weight` = paste0(round(weight_random, 1), "%")
+    )
+}
+
+df_fp_gh_era <- extract_smd_df_era(m_gh_era)
+df_fp_vi_era <- extract_smd_df_era(m_vi_era)
+df_fp_pf_era <- extract_smd_df_era(m_pf_era)
+df_fp_mh_era <- extract_smd_df_era(m_mh_era)
+
+df_fp_gh_region <- extract_smd_df_region(m_gh_era)
+df_fp_vi_region <- extract_smd_df_region(m_vi_region)
+df_fp_pf_region <- extract_smd_df_region(m_pf_region)
+df_fp_mh_region <- extract_smd_df_region(m_mh_region)
+
+write_xlsx(
+  list(
+    GeneralHealth_Era = df_fp_gh_era,
+    Vitality_Era = df_fp_vi_era,
+    Physicalfunctioning_Era = df_fp_pf_era,
+    MentalHealth_Era = df_fp_mh_era,
+    GeneralHealth_Region = df_fp_gh_region,
+    Vitality_Region = df_fp_vi_region,
+    Physicalfunctioning_Region = df_fp_pf_region,
+    MentalHealth_Region = df_fp_mh_region
+  ),
+  "Forest_Plots_Data/S7-8_QoL_Subgroup_data.xlsx"
+)
+```
+
+------------------------------------------------------------------------
+
+### Supp. F8) QoL by Region
+
+```{r, fig.height=16.5, fig.width=13, warning=FALSE}
+blank <- ggplot() + theme_void()
+
+fp_qol_by_region <- ggarrange(
+  fp_gh_region + ggtitle("A) General health") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_vi_region + ggtitle("B) Vitality") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_pf_region + ggtitle("C) Physical functioning") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  blank,
+  fp_mh_region + ggtitle("D) Mental health") + 
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"), margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "cm")),
+  ncol = 1,
+  heights = c(1, 0.03, 1, 0.03, 1, 0.03, 1)
+  )
+
+fp_qol_by_region
+
+# ggsave("Plots/Supp_f8_qol_by_region.pdf", fp_qol_by_region, width = 13, height = 16.5, bg = "white")
+# ggsave("Final plots/Supp_f8_qol_by_region.pdf", fp_qol_by_region, width = 13, height = 16.5, bg = "white")
+```
+
+### PCS & MCS Subgroup analyses
+
+```{r, fig.height=9, fig.width=26, warning=FALSE}
+combined_pcs_mcs_subgroups <- ggarrange(
+  fp_pcs_era + ggtitle("A) PCS by reporting era") +
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"),
+          margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+
+  fp_pcs_region + ggtitle("B) PCS by region") +
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"),
+          margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+
+  fp_mcs_era + ggtitle("C) MCS by reporting era") +
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"),
+          margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+
+  fp_mcs_region + ggtitle("D) MCS by region") +
+    theme(plot.title = element_text(hjust = 0, size = 14, face = "bold"),
+          margin = margin(t = 1, r = 0, b = 0.5, l = 0, unit = "cm")),
+
+  ncol = 2,
+  nrow = 2
+)
+
+combined_pcs_mcs_subgroups
+
+# ggsave(
+#   "Final plots/PCS_MCS_Subgroup_Analyses.jpg",
+#   combined_pcs_mcs_subgroups,
+#   width = 26,
+#   height = 9,
+#   units = "in",
+#   dpi = 300,
+#   bg = "white"
+# )
+```
